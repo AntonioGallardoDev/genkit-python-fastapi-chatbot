@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# venv
+.venv/
+venv/
+
+# env
+.env
+.env.*
+!.env.example
+
+# pytest
+.pytest_cache/
+
+# Genkit
+.genkit/
+
+# Memoria persistente
+data/memory/
+data/

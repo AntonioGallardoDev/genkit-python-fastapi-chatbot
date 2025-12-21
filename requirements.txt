@@ -1,0 +1,12 @@
+# Requiere Python 3.11.x (recomendado 3.11.9)
+
+genkit
+genkit-plugin-compat-oai
+python-dotenv
+rich
+
+fastapi
+uvicorn
+
+pytest
+pytest-timeout
