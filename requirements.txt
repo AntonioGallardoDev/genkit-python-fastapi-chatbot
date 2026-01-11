@@ -10,3 +10,6 @@ uvicorn
 
 pytest
 pytest-timeout
+
+argon2-cffi>=23.1.0
+PyJWT>=2.8.0

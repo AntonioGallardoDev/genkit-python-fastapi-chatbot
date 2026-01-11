@@ -2,11 +2,11 @@
 import os
 import re
 
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from pydantic import BaseModel, Field
-
 
 from flows import chat_flow
 from memory_json import (
@@ -23,7 +23,12 @@ from memory_json import (
     reset_structured_memory,
 )
 
-app = FastAPI(title="Genkit + FastAPI", version="0.5.0")
+# Auth (Paso 3)
+from auth_passwords import verify_password
+from auth_jwt import create_access_token, decode_token
+from users_repo_file import ensure_auth_store, get_user_by_email, get_user_by_id
+
+app = FastAPI(title="Genkit + FastAPI", version="0.6.0")
 
 # -----------------------------
 # Seguridad básica (API Key)
@@ -68,6 +73,7 @@ async def api_key_middleware(request: Request, call_next):
 
     return await call_next(request)
 
+
 def _validate_session_id(session_id: str) -> None:
     if not SESSION_ID_RE.match(session_id):
         raise HTTPException(
@@ -89,7 +95,7 @@ def _validate_prompt(prompt: str) -> None:
 
 
 # -----------------------------
-# Modelos
+# Modelos (Chat + Memoria)
 # -----------------------------
 class ChatRequest(BaseModel):
     prompt: str = Field(..., description="User prompt")
@@ -114,13 +120,101 @@ class StructuredMemoryPayload(BaseModel):
 
 
 # -----------------------------
-# Endpoints
+# Modelos (Auth)
+# -----------------------------
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class MeResponse(BaseModel):
+    id: str
+    email: str
+    roles: list[str]
+    department: str
+    is_active: bool
+
+
+# -----------------------------
+# Auth deps
+# -----------------------------
+bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+):
+    if creds is None or not creds.credentials:
+        raise HTTPException(status_code=401, detail="Missing Bearer token.")
+
+    try:
+        claims = decode_token(creds.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+
+    user_id = claims.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload (missing sub).")
+
+    user = get_user_by_id(user_id)
+    if not user or not user.get("is_active", False):
+        raise HTTPException(status_code=403, detail="User not found or inactive.")
+
+    # Nunca devolvemos el hash
+    user = dict(user)
+    user.pop("password_hash", None)
+    return user
+
+
+# -----------------------------
+# Endpoints (Health)
 # -----------------------------
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
+# -----------------------------
+# Endpoints (Auth)
+# -----------------------------
+@app.post("/auth/login", response_model=TokenResponse)
+async def auth_login(payload: LoginRequest):
+    # Garantiza store en runtime (no pisa si existe; inicializa si está vacío)
+    ensure_auth_store()
+
+    email = (payload.email or "").strip().lower()
+    user = get_user_by_email(email)
+
+    if not user or not user.get("is_active", False):
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+
+    if not verify_password(user.get("password_hash", ""), payload.password or ""):
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+
+    ttl = int(os.getenv("JWT_TTL_MINUTES", "60"))
+    token = create_access_token(
+        subject=user["id"],
+        roles=user.get("roles", []),
+        department=user.get("department", "global"),
+        ttl_minutes=ttl,
+    )
+
+    return TokenResponse(access_token=token)
+
+
+@app.get("/me", response_model=MeResponse)
+async def me(current_user=Depends(get_current_user)):
+    return MeResponse(**current_user)
+
+
+# -----------------------------
+# Endpoints (Chat)
+# -----------------------------
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     _validate_prompt(req.prompt)

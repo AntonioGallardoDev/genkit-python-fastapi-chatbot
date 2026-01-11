@@ -1,280 +1,177 @@
-# Genkit (Python beta) + FastAPI — Chatbot con memoria persistente (JSON) + resumen
+# Genkit (Python beta) + FastAPI — Chatbot corporativo con memoria persistente + Auth (Argon2id + JWT)
 
-Proyecto de **chatbot en Python** construido con **Genkit** (plugin **OpenAI compatible**) y **FastAPI**, expuesto como **API HTTP** y con **memoria persistente por sesión** en archivos **JSON**.
+Backend de chatbot en **Python** con **Genkit (plugin OpenAI compatible)** y **FastAPI**, diseñado como **base de un chatbot corporativo** seguro, extensible y testeado.
 
-Está pensado para ser **simple, auditable y extensible**, incorporando:
-- memoria híbrida (contexto reciente + resumen + memoria estructurada)
-- seguridad básica por API Key (sin usuarios aún)
-- batería de tests con `pytest`
-- checks básicos de seguridad (pip-audit, bandit, semgrep)
+Incluye:
+- **Memoria persistente en JSON** por sesión
+  - historial de mensajes
+  - summary (resumen acumulativo)
+  - structured_memory (perfil, preferencias, hechos, tareas)
+- **Seguridad básica por API Key**
+- **Autenticación corporativa (MVP)**:
+  - Hash de contraseñas **Argon2id**
+  - Tokens **JWT Bearer**
+  - Usuarios y roles en fichero (runtime en `data/auth/*.json`)
+- **Batería completa de tests** (`pytest`)
+- Compatible con **Genkit Developer UI**
 
 ---
 
 ## Características principales
 
-- API REST con FastAPI
-- Integración con Genkit (Python **beta**) + plugin OpenAI compatible
-- Memoria persistente por sesión en JSON (carpeta `data/`)
-- Memoria híbrida:
-  - **ventana de contexto reciente** (últimos N mensajes)
-  - **resumen acumulativo** (long-term memory)
-  - **memoria estructurada** (profile / preferences / facts / todos, etc.)
-- Endpoints para ver / editar / resetear memoria (resumen y estructurada)
-- **API Key obligatoria** para casi todos los endpoints
-- Tests con `pytest` (sin llamadas reales a OpenAI)
-- Compatible con Genkit Developer UI (`genkit start ...`)
+- Chat con memoria persistente y control explícito de estado.
+- Persistencia local en JSON (ideal para MVP y prototipos corporativos).
+- **API Key obligatoria** como primera capa de seguridad.
+- **Login real de usuarios**:
+  - `POST /auth/login`
+  - `GET /me`
+- Arquitectura preparada para evolucionar a:
+  - CRUD admin de usuarios y roles
+  - rate limiting
+  - observabilidad (OpenTelemetry)
+  - RAG corporativo con control de acceso
+  - persistencia en base de datos (SQLite/Postgres)
 
 ---
 
 ## Requisitos
 
-- Windows 11 (probado)
-- Python **3.11.x** (recomendado 3.11.9)
-- Node.js **20 LTS** (recomendado) — solo para `genkit-cli` y Dev UI
-- VS Code + extensión Python (Microsoft)
+- Python **3.11.x** (recomendado)
+- Windows 11 (compatible)
+- Node.js **20 LTS** (recomendado si se usa Genkit Dev UI / CLI)
 
 ---
 
-## Estructura de proyecto (orientativa)
+## Estructura del proyecto
 
-> En tu repo lo normal es que el código viva en `src/` y los tests en `tests/`.
+```
+src/
+ ├─ api.py                 # FastAPI + middleware + auth
+ ├─ flows.py               # Flujos Genkit
+ ├─ memory_json.py         # Memoria persistente por sesión
+ ├─ users_repo_file.py     # Repositorio de usuarios (JSON)
+ ├─ auth_passwords.py      # Hashing Argon2id
+ ├─ auth_jwt.py            # JWT
+ └─ run_api.py             # Arranque Uvicorn
 
-- `src/api.py` → FastAPI (endpoints + seguridad + validaciones)
-- `src/flows.py` → Flow de Genkit (chat_flow)
-- `src/memory_json.py` → Persistencia de memoria por sesión (JSON)
-- `src/run_api.py` → Arranque de Uvicorn
-- `tests/` → tests unitarios e integración (TestClient)
-- `data/` → **archivos JSON de memoria persistente** (se crea automáticamente)
-- `.env` / `.env.example` → variables de entorno
-- `requirements.txt` → dependencias
-- `README.md`, `REQUIREMENTS.md`, `AGENTS.md`, `.gitignore`
+tests/
+ └─ ...                    # Tests unitarios y de API
+
+data/                      # NO versionado
+ ├─ memory/
+ ├─ auth/
+ │   ├─ users.json         # runtime
+ │   └─ roles.json
+ └─ audit/                 # reservado
+
+Plantillas versionadas:
+ └─ data/auth/*.example.json
+```
 
 ---
 
 ## Variables de entorno
 
-Crea un `.env` (o exporta variables) con:
-
-- `OPENAI_API_KEY` → clave real de OpenAI (solo necesaria si llamas al modelo de verdad)
-- `API_KEY` → **API Key interna** para proteger endpoints (cabecera `X-API-Key`)
-- (opcional) `DATA_DIR` → carpeta donde guardar JSON de memoria (por defecto `data`)
-
-Ejemplo `.env`:
+Crear un `.env` (no versionado):
 
 ```env
-OPENAI_API_KEY="sk-..."
-API_KEY="change-me"
-DATA_DIR="data"
+API_KEY=changeme
+OPENAI_API_KEY=...
+JWT_SECRET=very-long-secret
+JWT_TTL_MINUTES=60
+MAX_PROMPT_CHARS=4000
 ```
 
 ---
 
-## Cómo ejecutar la API
-
-### 1) Crear entorno e instalar dependencias
+## Ejecución
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 2) Ejecutar con Uvicorn (modo simple)
-
-```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 python src/run_api.py
-# Uvicorn: http://127.0.0.1:8000
 ```
 
-### 3) Ejecutar con Genkit Dev UI (opcional)
+- API: http://127.0.0.1:8000
+- Docs: http://127.0.0.1:8000/docs
 
-Con Node 20 LTS instalado y `genkit-cli` disponible:
+---
+
+## Nota sobre Windows + Genkit
+
+Para usar **Genkit Developer UI**:
 
 ```powershell
 genkit start -- python src/run_api.py
-# Dev UI: http://localhost:4000 (puede variar el puerto)
 ```
 
----
-
-## Nota importante (Windows + Genkit)
-
-En algunos entornos, Genkit puede intentar escribir archivos de runtime con timestamps tipo ISO que incluyen `:`.
-En Windows esto puede provocar `OSError: [Errno 22] Invalid argument` porque `:` no es válido en nombres de archivo.
-
-La solución típica es **sanear el nombre** del archivo runtime reemplazando `:` por `-` (o similar) en el código que lo genera (o en la capa que lo envuelve), tal como hiciste al parchear el `_server.py`.
+(Node.js 20 LTS recomendado)
 
 ---
 
-## Seguridad básica (API Key obligatoria)
+## Seguridad
 
-- La API exige la cabecera: `X-API-Key: <API_KEY>`
-- Se suele permitir **sin key** un endpoint “público” de health (por ejemplo `/health`) para monitorización.
+### API Key
+- Header obligatorio: `X-API-Key`
+- Protege todas las rutas salvo `/health` y documentación.
 
----
-
-## Mini-guía: cómo funciona la memoria
-
-La memoria se guarda **por sesión** en JSON dentro de `data/` (o `DATA_DIR`):
-
-- Cada sesión tiene un `session_id`.
-- En el JSON se suelen mantener:
-  - `messages`: historial (o últimos N mensajes para contexto)
-  - `summary`: resumen acumulativo
-  - `structured`: memoria estructurada (diccionario)
-
-Flujo típico:
-1. El cliente crea una sesión (`/sessions/new`) o envía un `session_id`.
-2. En `/chat`, se carga memoria desde `data/<session_id>.json`.
-3. Se envía al flow el contexto reciente + `summary` + `structured`.
-4. Tras responder, se persiste:
-   - mensajes recientes
-   - actualización del resumen (si aplica)
-   - cambios en memoria estructurada
+### Autenticación (MVP)
+- Hash Argon2id
+- JWT firmado con `JWT_SECRET`
+- Claims: `sub`, `roles`, `department`, expiración
+- Doble capa temporal: API Key + JWT
 
 ---
 
-## Endpoints principales (resumen)
+## Endpoints principales
 
-> Los nombres exactos pueden variar según tu `src/api.py`, pero la idea es esta.
+### Health
+- `GET /health` (público)
 
-- `GET /health` → healthcheck (público)
-- `POST /sessions/new` → crea sesión
-- `GET /sessions/{session_id}` → recupera estado/metadata de sesión
-- `POST /sessions/{session_id}/reset` → resetea la sesión
-- `DELETE /sessions/{session_id}` → borra la sesión
-- `POST /chat` → chat (usa memoria persistente)
+### Auth
+- `POST /auth/login`
+- `GET /me`
 
-### Endpoints de resumen (summary)
-- `GET /sessions/{session_id}/summary`
-- `PUT /sessions/{session_id}/summary`
-- `POST /sessions/{session_id}/summary/reset`
+### Chat y sesiones
+- `POST /chat`
+- `POST /sessions/new`
+- `GET /sessions`
+- `GET /sessions/{id}`
+- `POST /sessions/{id}/reset`
+- `DELETE /sessions/{id}`
 
-### Endpoints de memoria estructurada
-- `GET /sessions/{session_id}/memory`
-- `PUT /sessions/{session_id}/memory` (set completo)
-- `PATCH /sessions/{session_id}/memory` (merge/update parcial)
-- `POST /sessions/{session_id}/memory/reset`
+### Memoria
+- Summary y structured memory (get / put / reset)
 
 ---
 
-## Ejemplos con curl
-
-> En Windows puedes usar curl (o PowerShell `Invoke-RestMethod`). Aquí van ejemplos con curl.
-
-Define:
-
-- `API_KEY="change-me"`
-- `BASE="http://127.0.0.1:8000"`
-
-### Crear sesión
+## Tests
 
 ```bash
-curl -s -X POST "$BASE/sessions/new" \
-  -H "X-API-Key: $API_KEY"
+python -m pytest
 ```
 
-### Chat (con sesión)
-
-```bash
-curl -s -X POST "$BASE/chat" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d '{"session_id":"<SESSION_ID>","prompt":"Hola, me llamo Antonio"}'
-```
-
-### Ver resumen
-
-```bash
-curl -s -X GET "$BASE/sessions/<SESSION_ID>/summary" \
-  -H "X-API-Key: $API_KEY"
-```
-
-### Editar resumen
-
-```bash
-curl -s -X PUT "$BASE/sessions/<SESSION_ID>/summary" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d '{"summary":"El usuario se llama Antonio. Le interesa Genkit y FastAPI."}'
-```
-
-### Ver memoria estructurada
-
-```bash
-curl -s -X GET "$BASE/sessions/<SESSION_ID>/memory" \
-  -H "X-API-Key: $API_KEY"
-```
-
-### Merge/update parcial de memoria estructurada
-
-```bash
-curl -s -X PATCH "$BASE/sessions/<SESSION_ID>/memory" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d '{"profile":{"name":"Antonio"}, "preferences":{"lang":"es"}}'
-```
+La suite:
+- no llama a OpenAI
+- usa ficheros temporales
+- valida auth, memoria y API
 
 ---
 
-## Tests (pytest)
+## Roadmap
 
-### Opción A (rápida)
+### ✅ Hecho
+- Memoria persistente JSON avanzada
+- API Key middleware
+- Repositorio de usuarios en fichero
+- Autenticación Argon2id + JWT (`/auth/login`, `/me`)
 
-```powershell
-$env:API_KEY="test-key"
-pytest
-```
-
-### Opción B (recomendada en Windows / PowerShell)
-
-En Windows (PowerShell) recomendamos fijar `PYTHONPATH=src` para que los imports funcionen igual que en ejecución:
-
-```powershell
-$env:PYTHONPATH="src"
-$env:API_KEY="test-key"
-pytest -q
-```
-
-> Tip: si usas un comando tipo `test-all`, asegúrate de que exporta también `PYTHONPATH=src`.
-
----
-
-## Checks básicos de seguridad
-
-### Dependencias Python (CVE)
-```powershell
-pip-audit
-```
-
-### Análisis estático (Python)
-```powershell
-bandit -r src -ll
-```
-
-### Semgrep (con encoding UTF-8 en Windows)
-```powershell
-$env:PYTHONIOENCODING="utf-8"
-chcp 65001
-semgrep --config=p/security-audit src
-```
-
----
-
-## Licencia
-
-Si lo publicas en GitHub y quieres máxima adopción, lo más común es:
-- **MIT** (muy permisiva)
-- **Apache-2.0** (permisiva + explícita en patentes)
-
-Si no tienes una preferencia clara, MIT suele ser la opción más sencilla para proyectos demo/plantilla.
-
----
-
-## Roadmap (siguiente fase)
-
-- Autenticación por usuarios (JWT/OAuth)
-- Rate limiting por IP/usuario
-- Observabilidad (OpenTelemetry + backend de trazas/logs)
-- Persistencia en DB (SQLite/Postgres) en lugar de JSON si crece
-- RAG (vector store) y políticas de acceso por rol
+### ⏭️ Próximo
+- Bootstrap seguro del primer admin
+- CRUD admin de usuarios/roles
+- Rate limiting
+- Auditoría de acciones sensibles
+- Observabilidad (OpenTelemetry)
+- RAG corporativo con control por rol/departamento
+- Persistencia en DB

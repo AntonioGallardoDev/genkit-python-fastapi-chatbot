@@ -17,6 +17,8 @@ venv/
 # Genkit
 .genkit/
 
-# Memoria persistente
-data/memory/
-data/
+# Datos persistentes (no versionar)
+data/*
+!data/**/.gitkeep
+!data/**/*.example.json
+

@@ -22,6 +22,11 @@ Objetivo: código simple, claro, reproducible en Windows 11 + VS Code.
 - `tests/test_api.py`: tests API (mock de chat_flow)
 - `tests/test_memory_json.py`: tests de persistencia real
 - `data/memory/`: sesiones JSON (no versionar)
+- `data/auth/`: usuarios/roles (NO versionar)
+  - `roles.json`: catálogo de roles/permisos
+  - `users.json`: usuarios con `password_hash` y metadatos
+- `data/audit/`: auditoría (JSONL)
+
 
 ---
 
@@ -30,6 +35,13 @@ Objetivo: código simple, claro, reproducible en Windows 11 + VS Code.
 - No guardar secretos en repo.
 - Mantener tests deterministas y sin red.
 - Mantener compatibilidad Windows (paths + nombres de fichero).
+
+## Reglas de auth (MVP fichero)
+- Nunca guardar passwords en claro. Solo `password_hash` (bcrypt/argon2).
+- No exponer `password_hash` en respuestas de API.
+- Validar roles y departamentos contra catálogo.
+- Persistencia robusta: lock + escritura atómica (mismo patrón que `memory_json.py`).
+- Añadir auditoría mínima (append-only JSONL) para acciones sensibles (login/admin).
 
 ---
 
@@ -55,9 +67,15 @@ Comandos:
 
 ---
 
+## Plantillas opcionales (si quieres versionar “ejemplos” sin secretos)
+- data/auth/roles.example.json
+- data/auth/users.example.json
+
 ## Checklist al entregar cambios
 - [ ] `python src/run_api.py` funciona
 - [ ] `pytest` pasa
 - [ ] No hay secretos en commits
 - [ ] README/REQUIREMENTS actualizados si cambia el comportamiento
 - [ ] `.gitignore` cubre `.env`, `.venv`, `.genkit`, `data/memory`, caches
+- [ ] `.gitignore` cubre `data/auth/` y `data/audit/`
+- [ ] Tests de auth/repo no usan red y son deterministas (tmp_path)
