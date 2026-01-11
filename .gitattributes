@@ -1,0 +1,23 @@
+# Normaliza texto a LF en el repo
+* text=auto eol=lf
+
+# Windows scripts (si aparecen en el futuro)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Docs y config
+*.md text eol=lf
+*.txt text eol=lf
+*.ini text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.env text eol=lf
+
+# Codigo
+*.py text eol=lf
+
+# Binarios reales del repo
+*.ico binary
+*.docx binary
